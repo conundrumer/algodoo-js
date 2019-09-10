@@ -9,42 +9,47 @@ module.exports = class AlgodooTransfer {
   constructor(basePath) {
     this.basePath = basePath;
 
+    this.messageFile = path.join(basePath, "transfer-message.txt");
+
     this.bufferFile = path.join(basePath, "transfer-buffer.txt");
     this.metaFile = path.join(basePath, "transfer-meta.txt");
     this.receivedFile = path.join(basePath, "transfer-received.txt");
+
     this.sendPromiseResolves = [];
   }
 
-  async init() {
+  async initSender() {
     await this.clear();
     // handle received commands
-    this.watcher = chokidar.watch(this.receivedFile).on("change", async () => {
-      const received = await fs.promises.readFile(this.receivedFile, "utf8");
-      if (received === "") return; // ignore when cleared
+    this.receivedFileWatcher = chokidar
+      .watch(this.receivedFile)
+      .on("change", async () => {
+        const received = await fs.promises.readFile(this.receivedFile, "utf8");
+        if (received === "") return; // ignore when cleared
 
-      const [bufferId, ...indices] = received.split(" ");
+        const [bufferId, ...indices] = received.split(" ");
 
-      if (bufferId !== this.bufferId) {
-        console.warn(
-          `Warning: sent buffer id is ${this.bufferId} but received ${bufferId}`
-        );
-      }
-      for (let index of indices) {
-        const i = parseInt(index);
-        if (i <= this.lastReceivedIndex) continue;
+        if (bufferId !== this.bufferId) {
+          console.warn(
+            `Warning: sent buffer id is ${this.bufferId} but received ${bufferId}`
+          );
+        }
+        for (let index of indices) {
+          const i = parseInt(index);
+          if (i <= this.lastReceivedIndex) continue;
 
-        this.sendPromiseResolves[i]();
-      }
-      const lastIndex = parseInt(indices[indices.length - 1]);
+          this.sendPromiseResolves[i]();
+        }
+        const lastIndex = parseInt(indices[indices.length - 1]);
 
-      if (lastIndex == this.bufferLength - 1) {
-        // buffer is done processing
-        this.clear();
-      } else {
-        this.lastReceivedIndex = lastIndex;
-      }
-    });
-    this.running = true;
+        if (lastIndex == this.bufferLength - 1) {
+          // buffer is done processing
+          this.clear();
+        } else {
+          this.lastReceivedIndex = lastIndex;
+        }
+      });
+    this.senderRunning = true;
   }
 
   /**
@@ -54,7 +59,7 @@ module.exports = class AlgodooTransfer {
    * @returns {Promise<void>} A promise that resolves when Algodoo confirms the expression was evaluated
    */
   async sendExpression(expression) {
-    if (!this.running) throw new Error("AlgodooTransfer not running!");
+    if (!this.senderRunning) throw new Error("AlgodooTransfer not running!");
 
     await this.clearPromise; // make sure clear() is done to avoid inconsistent state
     if (!this.bufferId) {
@@ -88,6 +93,33 @@ module.exports = class AlgodooTransfer {
       console.warn(`Warning: sendCommand failed: ${e}`);
     }
     return sendPromise;
+  }
+
+  /**
+   * @param {(message: string) => void} cb message handler
+   */
+  handleMessage(cb) {
+    if (this.handler)
+      throw new Error("AlgodooTransfer already has message handler!");
+    this.handler = cb;
+
+    const onChange = async () => {
+      const messages = await fs.promises.readFile(this.messageFile, "utf8");
+      if (messages === "") return; // ignore when cleared
+
+      for (let message of messages.split("\n")) {
+        if (message === "") continue;
+
+        cb(message);
+      }
+
+      fs.promises.writeFile(this.messageFile, "");
+    };
+    onChange(); // handle existing messages
+
+    this.messageFileWatch = chokidar
+      .watch(this.messageFile)
+      .on("change", onChange);
   }
 
   async clear() {
