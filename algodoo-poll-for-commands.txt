@@ -1,0 +1,33 @@
+(e) => {
+  meta = System.ReadWholeFile("transfer-meta.txt");
+  meta != null && meta != Scene.my._prevMeta && meta != "" ? {
+    Scene.my._prevMeta = meta;
+    metaList = string.split(meta, " ");
+    bufferId = metaList(0);
+    bufferLength = math.toInt(metaList(1));
+
+    received = "";
+    bufferId != Scene.my._bufferId ? {
+      Scene.my._bufferId = bufferId;
+      Scene.my._bufferIndex = 0;
+      received = received + bufferId;
+    } : {};
+
+    Scene.my._bufferIndex < bufferLength ? {
+      buffer = System.ReadWholeFile("transfer-buffer.txt");
+      buffer != null && buffer != "" ? {
+        expressions = string.split(buffer, "\n");
+        for(bufferLength - Scene.my._bufferIndex, (i) => {
+          index = i + Scene.my._bufferIndex;
+          eval(expressions(index));
+          received = received + " " + index;
+        });
+        Scene.my._bufferIndex = bufferLength
+      } : {}
+    } : {};
+
+    received != "" ? {
+      System.WriteToFile("transfer-received.txt", received);
+    } : {}
+  } : {}
+}
