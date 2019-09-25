@@ -14,7 +14,7 @@ const getPlaceholderImageUrl = id => `https://picsum.photos/id/${id}/88`;
 
 const jsToThymeObject = obj =>
   Object.keys(obj)
-    .map(key => `${key}=${JSON.stringify(obj[key])}`)
+    .map(key => `${key}:=${JSON.stringify(obj[key])}`)
     .join(";");
 
 algodooTransfer.initSender().then(() => {
